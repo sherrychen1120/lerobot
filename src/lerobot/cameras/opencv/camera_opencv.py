@@ -259,7 +259,9 @@ class OpenCVCamera(Camera):
         found_cameras_info = []
 
         if platform.system() == "Linux":
-            possible_paths = sorted(Path("/dev").glob("video*"), key=lambda p: p.name)
+            # Assuming all cameras are already mapped via udev rules to /dev/cam*
+            # eg. /dev/cam_front, /dev/cam_right, etc.
+            possible_paths = sorted(Path("/dev").glob("cam*"), key=lambda p: p.name)
             targets_to_scan = [str(p) for p in possible_paths]
         else:
             targets_to_scan = list(range(MAX_OPENCV_INDEX))

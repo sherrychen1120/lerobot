@@ -116,7 +116,7 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
-from so101_bench.raw_recorder import RawDatasetRecorder
+from so101_bench.raw_dataset_recorder import RawDatasetRecorder
 
 @dataclass
 class DatasetRecordConfig:

@@ -56,6 +56,19 @@ class OpenCVCameraConfig(CameraConfig):
     rotation: Cv2Rotation = Cv2Rotation.NO_ROTATION
     warmup_s: int = 1
 
+    # Camera Controls
+    auto_exposure: int | None = None
+    exposure: int | None = None
+    gain: int | None = None
+    auto_white_balance: int | None = None
+    white_balance_temperature: int | None = None
+    autofocus: bool | None = None
+    brightness: int | None = None
+    contrast: int | None = None
+    saturation: int | None = None
+    sharpness: int | None = None
+    zoom_absolute: int | None = None
+
     def __post_init__(self):
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
             raise ValueError(

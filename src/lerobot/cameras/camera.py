@@ -89,7 +89,7 @@ class Camera(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def read(self, color_mode: ColorMode | None = None) -> np.ndarray:
+    def read(self, color_mode: ColorMode | None = None) -> tuple[np.ndarray, float]:
         """Capture and return a single frame from the camera.
 
         Args:
@@ -97,12 +97,12 @@ class Camera(abc.ABC):
                         uses the camera's default color mode.
 
         Returns:
-            np.ndarray: Captured frame as a numpy array.
+            tuple[np.ndarray, float]: Captured frame as a numpy array and the timestamp of the frame.
         """
         pass
 
     @abc.abstractmethod
-    def async_read(self, timeout_ms: float = ...) -> np.ndarray:
+    def async_read(self, timeout_ms: float = ...) -> tuple[np.ndarray, float]:
         """Asynchronously capture and return a single frame from the camera.
 
         Args:
@@ -110,7 +110,10 @@ class Camera(abc.ABC):
                         Defaults to implementation-specific timeout.
 
         Returns:
-            np.ndarray: Captured frame as a numpy array.
+            tuple[np.ndarray, float]: Captured frame as a numpy array and the timestamp of the frame.
+        
+        TODO(sherry): Update other robot types to accept frame_timestamp as an
+        extra return value.
         """
         pass
 

@@ -133,6 +133,7 @@ class RealSenseCamera(Camera):
         self.stop_event: Event | None = None
         self.frame_lock: Lock = Lock()
         self.latest_frame: np.ndarray | None = None
+        self.latest_frame_timestamp: float | None = None
         self.new_frame_event: Event = Event()
 
         self.rotation: int | None = get_cv2_rotation(config.rotation)
@@ -351,7 +352,7 @@ class RealSenseCamera(Camera):
 
         return depth_map_processed
 
-    def read(self, color_mode: ColorMode | None = None, timeout_ms: int = 200) -> np.ndarray:
+    def read(self, color_mode: ColorMode | None = None, timeout_ms: int = 200) -> tuple[np.ndarray, float]:
         """
         Reads a single frame (color) synchronously from the camera.
 
@@ -375,6 +376,7 @@ class RealSenseCamera(Camera):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         start_time = time.perf_counter()
+        frame_timestamp = time.time()
 
         ret, frame = self.rs_pipeline.try_wait_for_frames(timeout_ms=timeout_ms)
 
@@ -389,7 +391,7 @@ class RealSenseCamera(Camera):
         read_duration_ms = (time.perf_counter() - start_time) * 1e3
         logger.debug(f"{self} read took: {read_duration_ms:.1f}ms")
 
-        return color_image_processed
+        return color_image_processed, frame_timestamp
 
     def _postprocess_image(
         self, image: np.ndarray, color_mode: ColorMode | None = None, depth_frame: bool = False
@@ -486,7 +488,7 @@ class RealSenseCamera(Camera):
         self.stop_event = None
 
     # NOTE(Steven): Missing implementation for depth for now
-    def async_read(self, timeout_ms: float = 200) -> np.ndarray:
+    def async_read(self, timeout_ms: float = 200) -> tuple[np.ndarray, float]:
         """
         Reads the latest available frame data (color) asynchronously.
 
@@ -522,12 +524,13 @@ class RealSenseCamera(Camera):
 
         with self.frame_lock:
             frame = self.latest_frame
+            frame_timestamp = self.latest_frame_timestamp
             self.new_frame_event.clear()
 
         if frame is None:
             raise RuntimeError(f"Internal error: Event set but no frame available for {self}.")
 
-        return frame
+        return frame, frame_timestamp
 
     def disconnect(self):
         """

@@ -136,6 +136,7 @@ class OpenCVCamera(Camera):
         self.stop_event: Event | None = None
         self.frame_lock: Lock = Lock()
         self.latest_frame: np.ndarray | None = None
+        self.latest_frame_timestamp: float | None = None
         self.new_frame_event: Event = Event()
 
         self.rotation: int | None = get_cv2_rotation(config.rotation)
@@ -318,7 +319,7 @@ class OpenCVCamera(Camera):
 
         return found_cameras_info
 
-    def read(self, color_mode: ColorMode | None = None) -> np.ndarray:
+    def read(self, color_mode: ColorMode | None = None) -> tuple[np.ndarray, float]:
         """
         Reads a single frame synchronously from the camera.
 
@@ -345,7 +346,7 @@ class OpenCVCamera(Camera):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         start_time = time.perf_counter()
-
+        frame_timestamp = time.time()
         ret, frame = self.videocapture.read()
 
         if not ret or frame is None:
@@ -356,7 +357,7 @@ class OpenCVCamera(Camera):
         read_duration_ms = (time.perf_counter() - start_time) * 1e3
         logger.debug(f"{self} read took: {read_duration_ms:.1f}ms")
 
-        return processed_frame
+        return processed_frame, frame_timestamp
 
     def _postprocess_image(self, image: np.ndarray, color_mode: ColorMode | None = None) -> np.ndarray:
         """
@@ -414,10 +415,11 @@ class OpenCVCamera(Camera):
         """
         while not self.stop_event.is_set():
             try:
-                color_image = self.read()
+                color_image, frame_timestamp = self.read()
 
                 with self.frame_lock:
                     self.latest_frame = color_image
+                    self.latest_frame_timestamp = frame_timestamp
                 self.new_frame_event.set()
 
             except DeviceNotConnectedError:
@@ -448,7 +450,7 @@ class OpenCVCamera(Camera):
         self.thread = None
         self.stop_event = None
 
-    def async_read(self, timeout_ms: float = 200) -> np.ndarray:
+    def async_read(self, timeout_ms: float = 200) -> tuple[np.ndarray, float]:
         """
         Reads the latest available frame asynchronously.
 
@@ -463,6 +465,7 @@ class OpenCVCamera(Camera):
         Returns:
             np.ndarray: The latest captured frame as a NumPy array in the format
                        (height, width, channels), processed according to configuration.
+            float: The timestamp of the frame.
 
         Raises:
             DeviceNotConnectedError: If the camera is not connected.
@@ -484,12 +487,13 @@ class OpenCVCamera(Camera):
 
         with self.frame_lock:
             frame = self.latest_frame
+            frame_timestamp = self.latest_frame_timestamp
             self.new_frame_event.clear()
 
         if frame is None:
             raise RuntimeError(f"Internal error: Event set but no frame available for {self}.")
 
-        return frame
+        return frame, frame_timestamp
 
     def disconnect(self):
         """

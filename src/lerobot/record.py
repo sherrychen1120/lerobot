@@ -235,12 +235,13 @@ def record_loop(
     if policy is not None:
         policy.reset()
 
-    timestamp = 0
+    actual_duration_s = 0
     sequence_number = 0
     start_episode_t = time.perf_counter()
-    while timestamp < control_time_s:
+    while actual_duration_s < control_time_s:
         sequence_number += 1
         start_loop_t = time.perf_counter()
+        start_loop_timestamp = time.time()
 
         if events["exit_early"]:
             events["exit_early"] = False
@@ -249,7 +250,8 @@ def record_loop(
         observation = robot.get_observation()
 
         if policy is not None or dataset is not None:
-            observation_frame = build_dataset_frame(dataset.features, observation, prefix="observation")
+            observation_no_timestamp = {k: v for k, v in observation.items() if not k.endswith("_timestamp")}
+            observation_frame = build_dataset_frame(dataset.features, observation_no_timestamp, prefix="observation")
 
         if policy is not None:
             action_values = predict_action(
@@ -285,16 +287,19 @@ def record_loop(
         sent_action = robot.send_action(action)
 
         if dataset is not None:
-            action_frame = build_dataset_frame(dataset.features, sent_action, prefix="action")
+            sent_action_no_timestamp = {k: v for k, v in sent_action.items() if k != "action_timestamp"}
+            action_frame = build_dataset_frame(dataset.features, sent_action_no_timestamp, prefix="action")
             frame = {**observation_frame, **action_frame}
             dataset.add_frame(frame, task=single_task)
 
         # Add frame to raw recorder if enabled
+        # Use start_loop_timestamp as the frame timestamp as that's controlled to run
+        # at as close to fps as possible.
         if raw_recorder is not None:
             raw_recorder.add_frame(
                 observation=deepcopy(observation),
                 action=sent_action,
-                timestamp=start_loop_t,
+                frame_timestamp=start_loop_timestamp,
                 sequence_number=sequence_number,
             )
 
@@ -304,7 +309,7 @@ def record_loop(
         dt_s = time.perf_counter() - start_loop_t
         busy_wait(1 / fps - dt_s)
 
-        timestamp = time.perf_counter() - start_episode_t
+        actual_duration_s = time.perf_counter() - start_episode_t
 
 
 @parser.wrap()

@@ -243,6 +243,20 @@ def record_loop(
         start_loop_t = time.perf_counter()
         start_loop_timestamp = time.time()
 
+        # Call this before any other operations to ensure the event is recorded.
+        # Because events might lead to early exit of the loop.
+        if raw_recorder is not None:
+            raw_recorder.add_event(
+                frame_timestamp=start_loop_timestamp,
+                events=events,
+            )
+
+        if events["emergency_stop"]:
+            logging.warning("Emergency stop pressed! Stopping data recording...")
+            assert events["exit_early"]
+            events["exit_early"] = False
+            break
+
         if events["exit_early"]:
             events["exit_early"] = False
             break

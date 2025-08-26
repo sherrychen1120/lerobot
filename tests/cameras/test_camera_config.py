@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
-"""
-Test script to verify camera configuration loading from JSON file.
-"""
+#!/usr/bin/env python
 
-import sys
-import os
+# Example of running a specific test:
+# ```bash
+# pytest tests/cameras/test_camera_config.py::test_json_camera_config
+# ```
 
-# Add the lerobot path to sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "third_party", "lerobot", "src"))
+import pytest
 
 from lerobot.robots.so101_follower.config_so101_follower import SO101FollowerConfig
 
@@ -26,6 +24,3 @@ def test_json_camera_config():
         print(f"  - {name}: {camera_config.type} camera ({camera_config.width}x{camera_config.height}@{camera_config.fps}fps)")
     
     print("✓ JSON camera configuration loading works!")
-
-if __name__ == "__main__":
-    test_json_camera_config()

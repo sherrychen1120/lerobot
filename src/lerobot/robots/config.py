@@ -28,7 +28,7 @@ class RobotConfig(draccus.ChoiceRegistry, abc.ABC):
     id: str | None = None
     # Directory to store calibration file
     calibration_dir: Path | None = None
-# Path to JSON file containing camera configurations
+    # Path to JSON file containing camera configurations
     camera_configs_path: Path | None = None
 
     def __post_init__(self):

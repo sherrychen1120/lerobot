@@ -235,12 +235,9 @@ class OpenCVCamera(Camera):
             desired_value = getattr(self.config, config_name, None)
             if desired_value is not None:
                 self.videocapture.set(cap_prop, desired_value)
-        
-        # Debug print to confirm camera controls are set.
-        for config_name, cap_prop in CONFIG_NAME_TO_CAP_PROP.items():
+            
             value = self.videocapture.get(cap_prop)
-            desired_value = getattr(self.config, config_name, None)
-            if desired_value is not None and value != desired_value:
+            if desired_value is not None and not np.isclose(value, desired_value):
                 raise ValueError(
                     f"[{self.config.index_or_path}] Failed to set {config_name}: "
                     f"desired={desired_value}, actual={value}"

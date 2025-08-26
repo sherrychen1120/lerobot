@@ -21,6 +21,7 @@ import math
 import os
 import platform
 import time
+from dataclasses import fields
 from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Any
@@ -46,6 +47,19 @@ MAX_OPENCV_INDEX = 60
 
 logger = logging.getLogger(__name__)
 
+CONFIG_NAME_TO_CAP_PROP = {
+    "auto_exposure": cv2.CAP_PROP_AUTO_EXPOSURE,
+    "exposure": cv2.CAP_PROP_EXPOSURE,
+    "gain": cv2.CAP_PROP_GAIN,
+    "auto_white_balance": cv2.CAP_PROP_AUTO_WB,
+    "white_balance_temperature": cv2.CAP_PROP_WB_TEMPERATURE,
+    "autofocus": cv2.CAP_PROP_AUTOFOCUS,
+    "brightness": cv2.CAP_PROP_BRIGHTNESS,
+    "contrast": cv2.CAP_PROP_CONTRAST,
+    "saturation": cv2.CAP_PROP_SATURATION,
+    "sharpness": cv2.CAP_PROP_SHARPNESS,
+    "zoom_absolute": cv2.CAP_PROP_ZOOM,
+}
 
 class OpenCVCamera(Camera):
     """
@@ -215,6 +229,22 @@ class OpenCVCamera(Camera):
                 self.capture_width, self.capture_height = default_width, default_height
         else:
             self._validate_width_and_height()
+        
+        # Configure camera controls.
+        for config_name, cap_prop in CONFIG_NAME_TO_CAP_PROP.items():
+            desired_value = getattr(self.config, config_name, None)
+            if desired_value is not None:
+                self.videocapture.set(cap_prop, desired_value)
+        
+        # Debug print to confirm camera controls are set.
+        for config_name, cap_prop in CONFIG_NAME_TO_CAP_PROP.items():
+            value = self.videocapture.get(cap_prop)
+            desired_value = getattr(self.config, config_name, None)
+            if desired_value is not None and value != desired_value:
+                raise ValueError(
+                    f"[{self.config.index_or_path}] Failed to set {config_name}: "
+                    f"desired={desired_value}, actual={value}"
+                )
 
     def _validate_fps(self) -> None:
         """Validates and sets the camera's frames per second (FPS)."""

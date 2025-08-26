@@ -32,6 +32,10 @@ lerobot-record \
     # --teleop.id=blue \
     # <- Policy optional if you want to record with a policy \
     # --policy.path=${HF_USER}/my_policy \
+    # <- Raw format optional for debugging and visualization \
+    # --dataset.save_raw_format=true \
+    # --dataset.raw_format_root=/path/to/raw/datasets \
+    # --dataset.raw_format_videos=true \
 ```
 
 Example recording with bimanual so100:
@@ -59,6 +63,7 @@ lerobot-record \
 
 import logging
 import time
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
@@ -111,7 +116,7 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
-
+from so101_bench.raw_recorder import RawDatasetRecorder
 
 @dataclass
 class DatasetRecordConfig:
@@ -149,6 +154,12 @@ class DatasetRecordConfig:
     # Number of episodes to record before batch encoding videos
     # Set to 1 for immediate encoding (default behavior), or higher for batched encoding
     video_encoding_batch_size: int = 1
+    # Enable raw dataset format recording alongside LeRobot format
+    save_raw_format: bool = False
+    # Root directory for raw format datasets (defaults to root if not specified)
+    raw_format_root: str | Path | None = None
+    # Save videos in raw format
+    raw_format_videos: bool = True
 
     def __post_init__(self):
         if self.single_task is None:
@@ -193,6 +204,7 @@ def record_loop(
     events: dict,
     fps: int,
     dataset: LeRobotDataset | None = None,
+    raw_recorder: RawDatasetRecorder | None = None,
     teleop: Teleoperator | list[Teleoperator] | None = None,
     policy: PreTrainedPolicy | None = None,
     control_time_s: int | None = None,
@@ -224,8 +236,10 @@ def record_loop(
         policy.reset()
 
     timestamp = 0
+    sequence_number = 0
     start_episode_t = time.perf_counter()
     while timestamp < control_time_s:
+        sequence_number += 1
         start_loop_t = time.perf_counter()
 
         if events["exit_early"]:
@@ -275,6 +289,15 @@ def record_loop(
             frame = {**observation_frame, **action_frame}
             dataset.add_frame(frame, task=single_task)
 
+        # Add frame to raw recorder if enabled
+        if raw_recorder is not None:
+            raw_recorder.add_frame(
+                observation=deepcopy(observation),
+                action=sent_action,
+                timestamp=start_loop_t,
+                sequence_number=sequence_number,
+            )
+
         if display_data:
             log_rerun_data(observation, action)
 
@@ -297,6 +320,25 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     action_features = hw_to_dataset_features(robot.action_features, "action", cfg.dataset.video)
     obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
     dataset_features = {**action_features, **obs_features}
+
+    # Initialize raw dataset recorder if enabled
+    raw_recorder = None
+    if cfg.dataset.save_raw_format:
+        raw_root = cfg.dataset.raw_format_root or cfg.dataset.root
+        # Extract dataset name from repo_id (e.g., "user/dataset" -> "dataset")
+        dataset_name = cfg.dataset.repo_id.split("/")[-1]
+        raw_recorder = RawDatasetRecorder(
+            dataset_name=dataset_name,
+            root_dir=raw_root,
+            robot_config=asdict(cfg.robot),
+            robot_calibration_fpath=robot.calibration_fpath,
+            teleop_config=asdict(cfg.teleop),
+            teleop_calibration_fpath=teleop.calibration_fpath,
+            fps=cfg.dataset.fps,
+            save_videos=cfg.dataset.raw_format_videos,
+            image_writer_processes=cfg.dataset.num_image_writer_processes,
+            image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera,
+        )
 
     if cfg.resume:
         dataset = LeRobotDataset(
@@ -339,6 +381,25 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         recorded_episodes = 0
         while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
             log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
+            
+            # Start raw recording episode if enabled
+            if raw_recorder is not None:
+                run_mode = "policy" if policy is not None else "teleop"
+                policy_info = None
+                if policy is not None:
+                    policy_info = {
+                        "policy_path": getattr(cfg.policy, "pretrained_path", None),
+                        "policy_name": policy.__class__.__name__,
+                    }
+                
+                raw_recorder.start_episode(
+                    episode_idx=dataset.num_episodes,
+                    run_mode=run_mode,
+                    policy_info=policy_info,
+                    leader_id=getattr(cfg.teleop, "id", None) if cfg.teleop else None,
+                    follower_id=getattr(cfg.robot, "id", None),
+                )
+            
             record_loop(
                 robot=robot,
                 events=events,
@@ -346,6 +407,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 teleop=teleop,
                 policy=policy,
                 dataset=dataset,
+                raw_recorder=raw_recorder,
                 control_time_s=cfg.dataset.episode_time_s,
                 single_task=cfg.dataset.single_task,
                 display_data=cfg.display_data,
@@ -372,9 +434,19 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 events["rerecord_episode"] = False
                 events["exit_early"] = False
                 dataset.clear_episode_buffer()
+                # Clear raw recorder episode if needed
+                if raw_recorder is not None:
+                    raw_recorder.current_episode = None
+                    raw_recorder.current_episode_dir = None
+                    raw_recorder.frame_count = 0
                 continue
 
             dataset.save_episode()
+            
+            # Save raw episode if enabled
+            if raw_recorder is not None:
+                raw_recorder.save_episode(task_description=cfg.dataset.single_task)
+            
             recorded_episodes += 1
 
     log_say("Stop recording", cfg.play_sounds, blocking=True)
@@ -385,6 +457,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     if not is_headless() and listener is not None:
         listener.stop()
+
+    # Cleanup raw recorder
+    if raw_recorder is not None:
+        raw_recorder.cleanup()
 
     if cfg.dataset.push_to_hub:
         dataset.push_to_hub(tags=cfg.dataset.tags, private=cfg.dataset.private)

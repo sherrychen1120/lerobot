@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import os
+import logging
 from typing import Any
 
 import numpy as np
 import rerun as rr
 
+logger = logging.getLogger(__name__)
 
 def _init_rerun(session_name: str = "lerobot_control_loop") -> None:
     """Initializes the Rerun SDK for visualizing the control loop."""
@@ -29,10 +31,12 @@ def _init_rerun(session_name: str = "lerobot_control_loop") -> None:
 
 
 def log_rerun_data(observation: dict[str | Any], action: dict[str | Any]):
+    logger.debug(f"[Rerun] observation.keys(): {observation.keys()}")
     for obs, val in observation.items():
         if isinstance(val, float):
             rr.log(f"observation.{obs}", rr.Scalar(val))
         elif isinstance(val, np.ndarray):
+            logger.debug(f"[Rerun] key {obs}, val.shape: {val.shape}")
             if val.ndim == 1:
                 for i, v in enumerate(val):
                     rr.log(f"observation.{obs}_{i}", rr.Scalar(float(v)))

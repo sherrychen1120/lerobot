@@ -116,7 +116,9 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
+
 from so101_bench.raw_dataset_recorder import RawDatasetRecorder
+from so101_bench.task_configurator import TaskConfigurator
 
 @dataclass
 class DatasetRecordConfig:
@@ -154,16 +156,28 @@ class DatasetRecordConfig:
     # Number of episodes to record before batch encoding videos
     # Set to 1 for immediate encoding (default behavior), or higher for batched encoding
     video_encoding_batch_size: int = 1
+    
     # Enable raw dataset format recording alongside LeRobot format
     save_raw_format: bool = False
     # Root directory for raw format datasets (defaults to root if not specified)
     raw_format_root: str | Path | None = None
     # Save videos in raw format
     raw_format_videos: bool = True
+    # Directory containing task specifications and templates
+    tasks_dir: str | Path | None = None
+    # Name of the specific task to use for configuration
+    task_name: str | None = None
 
     def __post_init__(self):
         if self.single_task is None:
             raise ValueError("You need to provide a task as argument in `single_task`.")
+        
+        # Validate task configuration options
+        if self.save_raw_format:
+            if (self.tasks_dir is None) != (self.task_name is None):
+                raise ValueError("Both tasks_dir and task_name must be provided together or neither should be provided.")
+        elif self.tasks_dir is not None or self.task_name is not None:
+            raise ValueError("tasks_dir and task_name can only be used when save_raw_format=True.")
 
 
 @dataclass
@@ -342,8 +356,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     # Initialize raw dataset recorder if enabled
     raw_recorder = None
+    task_configurator = None
     if cfg.dataset.save_raw_format:
-        raw_root = cfg.dataset.raw_format_root or cfg.dataset.root
+        raw_root = cfg.dataset.raw_format_root
         # Extract dataset name from repo_id (e.g., "user/dataset" -> "dataset")
         dataset_name = cfg.dataset.repo_id.split("/")[-1]
         raw_recorder = RawDatasetRecorder(
@@ -358,6 +373,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             image_writer_processes=cfg.dataset.num_image_writer_processes,
             image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera,
         )
+        if cfg.dataset.tasks_dir is not None and cfg.dataset.task_name is not None:
+            task_configurator = TaskConfigurator(
+                tasks_dir=Path(cfg.dataset.tasks_dir),
+                task_name=cfg.dataset.task_name,
+            )
 
     if cfg.resume:
         dataset = LeRobotDataset(
@@ -393,13 +413,27 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     robot.connect()
     if teleop is not None:
         teleop.connect()
-
-    listener, events = init_keyboard_listener()
-
+    
+    # TODO(sherry): Factor out KeyboardEventListener to a separate class
+    # that manages `events`` and controls the keyboard listener.
+    events = {
+        "stop_recording": False,
+    }
     with VideoEncodingManager(dataset):
         recorded_episodes = 0
         while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
             log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
+            
+            # Get task configuration if enabled
+            task_config = None
+            if task_configurator is not None:
+                try:
+                    task_config = task_configurator.get_task_config_from_user()
+                except Exception as e:
+                    logging.error(f"Error loading task configuration: {e}")
+                    log_say(f"Error with task configuration: {e}", cfg.play_sounds)
+                    # Continue without task config
+                    task_config = None
             
             # Start raw recording episode if enabled
             if raw_recorder is not None:
@@ -417,7 +451,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     policy_info=policy_info,
                     leader_id=getattr(cfg.teleop, "id", None) if cfg.teleop else None,
                     follower_id=getattr(cfg.robot, "id", None),
+                    task_config=task_config,
                 )
+            
+            # Starting keyboard listener right before the record loop
+            listener, events = init_keyboard_listener()
             
             record_loop(
                 robot=robot,
@@ -460,6 +498,10 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     raw_recorder.frame_count = 0
                 continue
 
+            # Stop keyboard listener at the end of each episode.
+            if not is_headless() and listener is not None:
+                listener.stop()
+
             dataset.save_episode()
             
             # Save raw episode if enabled
@@ -477,7 +519,6 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     if not is_headless() and listener is not None:
         listener.stop()
 
-    # Cleanup raw recorder
     if raw_recorder is not None:
         raw_recorder.cleanup()
 

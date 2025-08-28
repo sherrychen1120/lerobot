@@ -164,7 +164,7 @@ class SO101Follower(Robot):
             print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
 
     def get_observation(self) -> dict[str, Any]:
-        f"""
+        """
         Returns:
             dict[str, Any]: A flat dictionary representing the robot's current sensory state. Including:
                 - The timestamp of the robot state, with the key "robot_state_timestamp"

@@ -113,7 +113,7 @@ class Camera(abc.ABC):
             tuple[np.ndarray, float]: Captured frame as a numpy array and the timestamp of the frame.
         
         TODO(sherry): Update other robot types to accept frame_timestamp as an
-        extra return value.
+        extra return value. (Currently only so101_follower supports this.)
         """
         pass
 

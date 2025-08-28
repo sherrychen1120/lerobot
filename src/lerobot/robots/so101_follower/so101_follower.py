@@ -164,20 +164,32 @@ class SO101Follower(Robot):
             print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
 
     def get_observation(self) -> dict[str, Any]:
+        """
+        Returns:
+            dict[str, Any]: A flat dictionary representing the robot's current sensory state. Including:
+                - The timestamp of the robot state, with the key "robot_state_timestamp"
+                - Joint posiitons, with keys "<joint_name>.pos"
+                - The timestamp of each camera, with the key "<camera_name>_timestamp"
+                - The image from each camera, with the key "<camera_name>"
+        """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Read arm position
         start = time.perf_counter()
         obs_dict = self.bus.sync_read("Present_Position")
+        robot_state_timestamp = time.time()
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        obs_dict["robot_state_timestamp"] = robot_state_timestamp
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
         # Capture images from cameras
         for cam_key, cam in self.cameras.items():
             start = time.perf_counter()
-            obs_dict[cam_key] = cam.async_read()
+            img, cam_timestamp = cam.async_read()
+            obs_dict[cam_key] = img
+            obs_dict[f"{cam_key}_timestamp"] = cam_timestamp
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
@@ -195,6 +207,7 @@ class SO101Follower(Robot):
 
         Returns:
             the action sent to the motors, potentially clipped.
+            The dictionary also contains the timestamp when the action was sent, with the key "action_timestamp".
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -210,7 +223,10 @@ class SO101Follower(Robot):
 
         # Send goal position to the arm
         self.bus.sync_write("Goal_Position", goal_pos)
-        return {f"{motor}.pos": val for motor, val in goal_pos.items()}
+        action_timestamp = time.time()
+        action_sent = {f"{motor}.pos": val for motor, val in goal_pos.items()}
+        action_sent["action_timestamp"] = action_timestamp
+        return action_sent
 
     def disconnect(self):
         if not self.is_connected:

@@ -80,6 +80,7 @@ def visualize_camera_feeds(observation: dict[str, Any]):
             display_img = cv2.cvtColor(display_img, cv2.COLOR_RGB2BGR)
         
         # Modify image stream to match teleoperator POV.
+        # TODO(sherry): Make this configurable in RecordConfig.
         if cam_key == "cam_top":
             display_img = cv2.rotate(display_img, cv2.ROTATE_90_CLOCKWISE)
         elif cam_key == "cam_front":
@@ -89,4 +90,3 @@ def visualize_camera_feeds(observation: dict[str, Any]):
     
     # Process OpenCV events to update display windows
     cv2.waitKey(1)
-        

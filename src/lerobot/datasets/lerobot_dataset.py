@@ -484,7 +484,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self.hf_dataset = self.load_hf_dataset()
 
         self.episode_data_index = get_episode_data_index(self.meta.episodes, self.episodes)
-
+        self.episode_index_to_subset_index = {ep_idx: i for i, ep_idx in enumerate(self.episodes)}
+        
         # Check timestamps
         timestamps = torch.stack(self.hf_dataset["timestamp"]).numpy()
         episode_indices = torch.stack(self.hf_dataset["episode_index"]).numpy()
@@ -705,10 +706,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx) -> dict:
         item = self.hf_dataset[idx]
         ep_idx = item["episode_index"].item()
-
+        
         query_indices = None
         if self.delta_indices is not None:
-            query_indices, padding = self._get_query_indices(idx, ep_idx)
+            subset_ep_idx = self.episode_index_to_subset_index[ep_idx]
+            query_indices, padding = self._get_query_indices(idx, subset_ep_idx)
             query_result = self._query_hf_dataset(query_indices)
             item = {**item, **padding}
             for key, val in query_result.items():
@@ -880,6 +882,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # Episode data index and timestamp checking
         ep_data_index = get_episode_data_index(self.meta.episodes, [episode_index])
+
         ep_data_index_np = {k: t.numpy() for k, t in ep_data_index.items()}
         check_timestamps_sync(
             episode_buffer["timestamp"],

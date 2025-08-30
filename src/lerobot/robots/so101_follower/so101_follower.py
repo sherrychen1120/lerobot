@@ -177,7 +177,7 @@ class SO101Follower(Robot):
 
         # Read arm position
         start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position")
+        obs_dict = self.bus.sync_read("Present_Position", num_retry=6)
         robot_state_timestamp = time.time()
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
         obs_dict["robot_state_timestamp"] = robot_state_timestamp

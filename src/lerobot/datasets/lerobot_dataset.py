@@ -484,7 +484,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
             self.hf_dataset = self.load_hf_dataset()
 
         self.episode_data_index = get_episode_data_index(self.meta.episodes, self.episodes)
-        self.episode_index_to_subset_index = {ep_idx: i for i, ep_idx in enumerate(self.episodes)}
+        self.episode_index_to_subset_index = {}
+        if self.episodes is not None:
+            self.episode_index_to_subset_index = {ep_idx: i for i, ep_idx in enumerate(self.episodes)}
         
         # Check timestamps
         timestamps = torch.stack(self.hf_dataset["timestamp"]).numpy()

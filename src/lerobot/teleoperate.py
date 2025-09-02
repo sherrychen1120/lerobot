@@ -51,6 +51,7 @@ lerobot-teleoperate \
 
 """
 
+import cv2
 import logging
 import time
 from dataclasses import asdict, dataclass

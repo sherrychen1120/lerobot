@@ -25,7 +25,6 @@ lerobot-setup-motors \
 """
 
 from dataclasses import dataclass
-from lerobot.utils.utils import init_logging
 
 import draccus
 
@@ -82,7 +81,6 @@ def setup_motors(cfg: SetupConfig):
 
 
 def main():
-    init_logging(console_level="DEBUG")
     setup_motors()
 
 

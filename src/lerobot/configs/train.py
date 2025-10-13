@@ -52,6 +52,7 @@ class TrainPipelineConfig(HubMixin):
     # Number of workers for the dataloader.
     num_workers: int = 4
     batch_size: int = 8
+    eval_batch_size: int = 88
     steps: int = 100_000
     eval_freq: int = 20_000
     log_freq: int = 200
@@ -63,6 +64,8 @@ class TrainPipelineConfig(HubMixin):
     scheduler: LRSchedulerConfig | None = None
     eval: EvalConfig = field(default_factory=EvalConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
+
+    log_sub_losses: bool = True
 
     def __post_init__(self):
         self.checkpoint_path = None

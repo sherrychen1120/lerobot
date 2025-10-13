@@ -160,6 +160,7 @@ class ACTPolicy(PreTrainedPolicy):
             F.l1_loss(batch[ACTION], actions_hat, reduction="none") * ~batch["action_is_pad"].unsqueeze(-1)
         ).mean()
 
+        # For ACT, eval loss = l1_loss.
         loss_dict = {"l1_loss": l1_loss.item()}
         if self.config.use_vae and self.training:
             # Calculate Dₖₗ(latent_pdf || standard_normal). Note: After computing the KL-divergence for
